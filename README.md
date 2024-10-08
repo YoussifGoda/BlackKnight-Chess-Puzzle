@@ -28,7 +28,7 @@ Black Knight Puzzle is a chess-inspired puzzle game implemented in Python using 
 
 3. Clone this repository or download the source code:
    ```
-   git clone https://github.com/your-username/black-knight-puzzle.git
+   git clone https://github.com/YoussifGoda/black-knight-puzzle.git
    cd black-knight-puzzle
    ```
 
