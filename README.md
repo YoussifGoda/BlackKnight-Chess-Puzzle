@@ -1,99 +1,130 @@
-# Black Knight Puzzle Game
-<img width="798" alt="Screenshot 2024-09-26 at 2 18 42 PM" src="https://github.com/user-attachments/assets/0687887a-bbc7-4af9-8423-cedc25594d5f">
+# Black Knight Chess Puzzle Game
 
-## Description
+A challenging Pygame-based chess puzzle game where your objective is to maneuver the black knight to a target square while navigating around white pieces. This is a single-player puzzle game that tests your strategic thinking and planning skills.
 
-Black Knight Puzzle is a chess-inspired puzzle game implemented in Python using the Pygame library. The objective is to move the black knight to a specific target square on a custom chess board while navigating around other pieces.
+## Overview
+
+In this puzzle game, you control a lone black knight surrounded by white chess pieces (bishops, rooks, and knights). Your goal is to move the black knight to the target square (the light blue square) in the minimum number of moves. The twist: pieces can only move into the empty square on the board, creating a sliding puzzle-like mechanic combined with chess piece movement rules.
 
 ## Features
 
-- Custom 6x2 chess board with two additional squares
-- Movement of white pieces (bishops, knights, rooks) and a single black knight
-- No turn order - players can move any piece at any time
-- Win condition when the black knight reaches the target square
+- Interactive Chess Puzzle Gameplay: Move pieces strategically to create a path for the black knight
+- Smooth Animations: Pieces animate smoothly when moving across the board
+- Hint System: Get AI-powered hints using breadth-first search to find the optimal next move
+- Move Counter: Track how many moves it takes to complete the puzzle
+- Visual Feedback: Hover effects, pulsing valid move indicators, and glowing target square
+- Win Screen: Celebratory message displaying your final move count
+- PyInstaller Compatible: Includes resource path handling for bundled executables
 
-## Requirements
+## Screenshot
 
-- Python 3.7+
-- Pygame 2.0.1+
-
-## Installation
-
-1. Ensure you have Python installed on your system. You can download it from [python.org](https://www.python.org/downloads/).
-
-2. Install Pygame by running the following command in your terminal:
-   ```
-   pip install pygame
-   ```
-
-3. Clone this repository or download the source code:
-   ```
-   git clone https://github.com/your-username/black-knight-puzzle.git
-   cd black-knight-puzzle
-   ```
-
-## File Structure
-
-Ensure your project directory looks like this:
-
-```
-black-knight-puzzle/
-│
-├── black_knight_puzzle.py
-├── assets/
-│   └── images/
-│       ├── black knight.png
-│       ├── white bishop.png
-│       ├── white knight.png
-│       └── white rook.png
-├── NightPumpkind-1GpGv.ttf
-├── Blacknorthdemo-mLE25.ttf
-└── README.md
-```
-
-## Running the Game
-
-1. Navigate to the game directory in your terminal.
-
-2. Run the following command:
-   ```
-   python black_knight_puzzle.py
-   ```
+![alt text](image.png)
+![alt text](image-1.png)
 
 ## How to Play
 
-1. The game board will appear with white pieces (bishops, knights, rooks) and a single black knight.
+1. Select a Piece: Click on any white or black piece to select it
+2. View Valid Moves: When a piece is selected, all valid moves appear as pulsing blue circles
+3. Move a Piece: Click on a highlighted blue circle to move the selected piece to that square
+4. Reach the Target: Move the black knight to the light blue square in the bottom-right area of the board
+5. Use Hints: Click the "Hint" button to receive an AI suggestion for your next move
+6. Play Again: Click "Play Again" to reset the puzzle and try again
 
-2. Click on any piece to select it. Valid moves will be highlighted with red circles.
+## Game Rules
 
-3. Click on a highlighted square to move the selected piece.
-
-4. There is no turn order - you can move any piece (white or black) at any time.
-
-5. The goal is to move the black knight to the light blue square in the top-right corner of the board.
-
-6. The game ends when the black knight reaches the target square.
+- Pieces Move According to Chess Rules: Knights move in an L-shape (2 squares in one direction, 1 square perpendicular), Bishops move diagonally any number of squares, Rooks move horizontally or vertically any number of squares
+- Only Move into Empty Squares: Pieces can only move to the currently empty square on the board
+- No Captures: This is a puzzle game—pieces cannot capture each other
+- Objective: Get the black knight to square (5, 2)—the glowing target in the lower right
 
 ## Controls
 
-- Left Mouse Button: Select and move pieces
+- Mouse Click: Select pieces and move them
+- Hint Button: Get an AI-suggested move using optimal pathfinding
+- Play Again Button: Reset the puzzle to its starting position
 
-## Customization
+## Technical Details
 
-You can customize the game by modifying the following in `black_knight_puzzle.py`:
+### Requirements
 
-- Board size and layout
-- Initial piece positions
-- Piece images
-- Font styles
+Python 3.7+ and Pygame
+
+### Installation
+
+```bash
+pip install pygame
+```
+
+### Running the Game
+
+```bash
+python blackknight.py
+```
+
+### Project Structure
+
+The game expects the following directory structure for assets:
+
+```
+project_root/
+├── build/web/assets/
+│   ├── images/
+│   │   ├── black knight.png
+│   │   ├── white rook.png
+│   │   ├── white knight.png
+│   │   └── white bishop.png
+│   └── Blacknorthdemo-mLE25.ttf
+└── blackknight.py
+```
+
+### Asset Requirements
+
+Images: Provide 80x80 PNG images for black knight.png, white rook.png, white knight.png, and white bishop.png
+
+Font: Include Blacknorthdemo-mLE25.ttf for custom text rendering (fallback to default system font if unavailable)
+
+### Key Features Implementation
+
+- Smooth Animations: Uses smoothstep easing for natural piece movement
+- AI Hint System: Implements breadth-first search (BFS) to find the shortest path to victory
+- Button Feedback: Interactive buttons with hover states and press feedback
+- Pulsing Effects: Smooth sine-wave based animations for UI elements like valid moves and the target square
+- PyInstaller Support: Resource path helper ensures assets load correctly in both development and bundled executables
+
+## Game Board
+
+The game board is a custom shape (not a full 8x8 chess board). Rows 0-1 have full 6-column width (columns 0-5), Row 2 has only 2 columns available (columns 4-5), for a total of 14 playable squares. The target square is located at position (5, 2) in the bottom-right corner.
+
+## Colors and UI
+
+- Board Colors: Light and dark alternating squares for visual clarity
+- Accent Color: Golden yellow for headings and emphasis
+- Valid Moves: Pulsing blue circles indicating where selected pieces can move
+- Target Square: Glowing cyan square marking the puzzle objective
+- Buttons: Color-coded with blue (normal), green (hint), and red (reset) themes
+
+## Solving Strategy
+
+This puzzle is designed to require forward planning. Use the hint system to learn the optimal solution, or try to solve it yourself by analyzing the current piece positions, planning which pieces need to move to create a path for the black knight, moving pieces strategically to free up the board, and guiding the black knight toward the target.
+
+## Tips for Success
+
+- Study the board layout before making moves
+- Use the hint system if you get stuck
+- Try to find creative solutions with fewer moves than the AI suggests
+- Notice how the empty square is key to unlocking different piece movements
 
 ## Troubleshooting
 
-If you encounter any issues:
+Images not loading: Ensure the build/web/assets/images/ directory exists with all required PNG files. The game will create placeholder gray squares if images are missing.
 
-1. Ensure all required files (images, fonts) are in the correct directories.
-2. Verify that Pygame is installed correctly.
-3. Check that you're using a compatible Python version.
+Font not loading: The game falls back to the system default font if the custom font is unavailable.
+
+PyInstaller issues: The resource_path helper should automatically resolve paths in both development and bundled environments.
+
+## Credits
+
+Developed with Pygame. Includes BFS pathfinding algorithm for optimal move suggestions and smooth animation easing for polished gameplay.
 
 ## Contributing
 
@@ -102,3 +133,11 @@ Feel free to fork this repository and submit pull requests with improvements or 
 ## License
 
 This project is open source and available under the [MIT License](https://opensource.org/licenses/MIT).
+
+## Future Enhancements
+
+- Multiple difficulty levels with different starting positions
+- Leaderboard system to track best move counts
+- Tutorial mode for new players
+- Additional puzzle variations and challenges
+- Sound effects and background music
