@@ -1,0 +1,3 @@
+([('main',
+   '/Users/youssifsalah/Desktop/CS Projects/BlackKnight Chess Puzzle/dist/main',
+   'EXECUTABLE')],)
