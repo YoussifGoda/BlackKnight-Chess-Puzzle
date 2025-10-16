@@ -5,7 +5,7 @@ import os
 import math
 
 pygame.init()
-WIDTH = 800
+WIDTH = 900
 HEIGHT = 600
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
 pygame.display.set_caption("BlackKnight Puzzle")
@@ -52,6 +52,7 @@ selection = None
 valid_moves = []
 move_count = 0
 winner = ""
+game_history = []  # List to store previous game results
 
 hint_piece = None
 hint_move = None
@@ -110,6 +111,8 @@ BUTTON_ACCENT = (70, 180, 80)
 BUTTON_ACCENT_HOVER = (90, 210, 100)
 BUTTON_DANGER = (180, 70, 70)
 BUTTON_DANGER_HOVER = (220, 100, 100)
+BUTTON_EXIT = (100, 100, 110)
+BUTTON_EXIT_HOVER = (130, 130, 140)
 ACCENT_COLOR = (255, 200, 80)
 
 BOARD_ORIGIN = (0, 0)
@@ -244,8 +247,9 @@ class Button:
         return False
 
 # Buttons
-play_again_btn = Button((650, 500, 120, 50), "Play Again", base_color=BUTTON_DANGER, hover_color=BUTTON_DANGER_HOVER)
-hint_btn = Button((500, 500, 120, 50), "Hint", base_color=BUTTON_ACCENT, hover_color=BUTTON_ACCENT_HOVER)
+play_again_btn = Button((500, 520, 120, 50), "Play Again", base_color=BUTTON_DANGER, hover_color=BUTTON_DANGER_HOVER)
+hint_btn = Button((350, 520, 120, 50), "Hint", base_color=BUTTON_ACCENT, hover_color=BUTTON_ACCENT_HOVER)
+exit_btn = Button((650, 520, 120, 50), "Exit", base_color=BUTTON_EXIT, hover_color=BUTTON_EXIT_HOVER)
 
 def draw_ui():
     global ui_pulse
@@ -255,19 +259,34 @@ def draw_ui():
     pygame.draw.rect(screen, (25, 30, 40), [0, 300, WIDTH, 300])
     pygame.draw.line(screen, (100, 120, 160), (0, 300), (WIDTH, 300), 2)
     
-    screen.blit(big_font.render('Black Knight', True, ACCENT_COLOR), (20, 320))
-    screen.blit(small_font.render('Move the Black Knight to the light blue square! (No captures)', True, TEXT_COLOR), (20, 380))
-    screen.blit(small_font.render('Click a piece, then click a highlighted square to move it.', True, (200, 200, 200)), (20, 410))
+    screen.blit(big_font.render('Black Knight', True, ACCENT_COLOR), (20, 230))
+    screen.blit(small_font.render('Move the Black Knight to the light blue square! (No captures)', True, TEXT_COLOR), (20, 320))
+    screen.blit(small_font.render('Click a piece, then click a highlighted square to move it.', True, (200, 200, 200)), (20, 345))
+    screen.blit(small_font.render('This puzzle could be solved in 18 moves!', True, (200, 200, 200)), (20, 370))
     
     move_text = small_font.render(f'Moves: {move_count}', True, ACCENT_COLOR)
-    screen.blit(move_text, (650, 20))
+    screen.blit(move_text, (700, 20))
+    
+    # Display previous game history
+    history_y = 55
+    if game_history:
+        screen.blit(tiny_font.render('Previous Attempts:', True, ACCENT_COLOR), (700, history_y))
+        history_y += 25
+        for i, entry in enumerate(game_history[-3:]):  # Show last 3 attempts
+            status_color = (100, 255, 100) if entry['completed'] else (200, 100, 100)
+            status_text = "Win" if entry['completed'] else "Did Not Finish"
+            history_text = tiny_font.render(f"Try {entry['attempt']}: {entry['moves']} mvs - {status_text}", True, status_color)
+            screen.blit(history_text, (700, history_y))
+            history_y += 22
 
     # buttons
     mouse_pos = pygame.mouse.get_pos()
     play_again_btn.update_hover(mouse_pos)
     hint_btn.update_hover(mouse_pos)
+    exit_btn.update_hover(mouse_pos)
     play_again_btn.draw()
     hint_btn.draw()
+    exit_btn.draw()
 
 def reset_game():
     global white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move
@@ -430,7 +449,7 @@ def start_animation(piece_type, index, start_pos, end_pos, steps=12):
     }
 
 def update_animation():
-    global animating, anim_info, white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move
+    global animating, anim_info, white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move, game_history
     if not animating or not anim_info:
         return
     anim_info['step'] += 1
@@ -450,10 +469,17 @@ def update_animation():
         else:
             black_locations[anim_info['index']] = anim_info['end']
             if black_locations[0] == (5,2):
-                winner = f"Black Knight wins in {move_count + 1} moves!"
+                move_count += 1
+                winner = f"Black Knight wins in {move_count} moves!"
+                game_history.append({
+                    'attempt': len(game_history) + 1,
+                    'moves': move_count,
+                    'completed': True
+                })
         animating = False
         anim_info = None
-        move_count += 1
+        if winner == "":
+            move_count += 1
         selection = None
         valid_moves = []
         hint_piece = None
@@ -476,7 +502,7 @@ def draw_anim_piece():
     screen.blit(img, (draw_x, draw_y))
 
 def main():
-    global selection, valid_moves, move_count, winner, hint_piece, hint_move, animating, anim_info
+    global selection, valid_moves, move_count, winner, hint_piece, hint_move, animating, anim_info, game_history
 
     run = True
     while run:
@@ -537,6 +563,12 @@ def main():
                 mx, my = event.pos
                 # buttons
                 if play_again_btn.clicked(event.pos):
+                    if move_count > 0 and winner == "":
+                        game_history.append({
+                            'attempt': len(game_history) + 1,
+                            'moves': move_count,
+                            'completed': False
+                        })
                     reset_game()
                     continue
                 if hint_btn.clicked(event.pos):
@@ -547,6 +579,9 @@ def main():
                     else:
                         hint_piece = None
                         hint_move = None
+                    continue
+                if exit_btn.clicked(event.pos):
+                    run = False
                     continue
 
                 # board click
