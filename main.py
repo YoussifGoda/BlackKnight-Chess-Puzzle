@@ -6,7 +6,7 @@ import math
 
 pygame.init()
 WIDTH = 900
-HEIGHT = 600
+HEIGHT = 650
 screen = pygame.display.set_mode([WIDTH, HEIGHT])
 pygame.display.set_caption("BlackKnight Puzzle")
 
@@ -18,11 +18,9 @@ def resource_path(relative_path):
     Get absolute path to resource, works for dev and PyInstaller onefile.
     relative_path: path relative to project root, e.g. "build/web/assets/images/black knight.png"
     """
-    # Normalize path separators
     relative_path = os.path.normpath(relative_path)
     try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS  # type: ignore
+        base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
@@ -38,21 +36,68 @@ def load_font(path, size):
 small_font = load_font("build/web/assets/Blacknorthdemo-mLE25.ttf", 20)
 big_font = load_font("build/web/assets/Blacknorthdemo-mLE25.ttf", 48)
 tiny_font = load_font("build/web/assets/Blacknorthdemo-mLE25.ttf", 16)
+medium_font = load_font("build/web/assets/Blacknorthdemo-mLE25.ttf", 28)
 
 timer = pygame.time.Clock()
 fps = 60
 
-# Game variables and images
-white_pieces = ['bishop', 'bishop', 'bishop', 'bishop', 'rook', 'knight', 'knight', 'knight', 'knight', 'rook', 'rook', 'rook']
-white_locations = [(1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
-                   (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (4, 2)]
+# Level definitions
+LEVELS = [
+    {
+        'name': 'Tutorial',
+        'white_pieces': ['rook', 'bishop'],
+        'white_locations': [(2, 0), (3, 0)],
+        'black_start': (0, 0),
+        'target': (5, 2),
+        'optimal_moves': 8,
+        'description': 'Learn to move the knight',
+        'tutorial_text': 'Move white pieces to create a path for the black knight'
+    },
+    {
+        'name': 'Easy',
+        'white_pieces': ['bishop', 'bishop', 'rook', 'knight'],
+        'white_locations': [(1, 0), (2, 0), (3, 0), (4, 0)],
+        'black_start': (0, 0),
+        'target': (5, 2),
+        'optimal_moves': 12,
+        'description': 'Navigate around more pieces',
+        'tutorial_text': 'Plan your moves - white pieces block the knight\'s path'
+    },
+    {
+        'name': 'Medium',
+        'white_pieces': ['bishop', 'bishop', 'rook', 'knight', 'knight', 'rook'],
+        'white_locations': [(1, 0), (2, 0), (3, 0), (0, 1), (1, 1), (4, 0)],
+        'black_start': (0, 0),
+        'target': (5, 2),
+        'optimal_moves': 15,
+        'description': 'A trickier puzzle awaits',
+        'tutorial_text': 'Think ahead - multiple pieces need repositioning'
+    },
+    {
+        'name': 'Hard',
+        'white_pieces': ['bishop', 'bishop', 'bishop', 'bishop', 'rook', 'knight', 'knight', 'knight', 'knight', 'rook', 'rook', 'rook'],
+        'white_locations': [(1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (4, 2)],
+        'black_start': (0, 0),
+        'target': (5, 2),
+        'optimal_moves': 18,
+        'description': 'The ultimate challenge',
+        'tutorial_text': 'Master puzzle! Use the hint if you get stuck.'
+    }
+]
+
+# Game state
+current_level = 0
+game_state = 'menu'  # 'menu', 'playing', 'level_complete', 'game_complete'
+white_pieces = []
+white_locations = []
 black_pieces = ['knight']
-black_locations = [(0, 0)]
+black_locations = []
 selection = None
 valid_moves = []
 move_count = 0
 winner = ""
-game_history = []  # List to store previous game results
+game_history = []
+level_stats = [{} for _ in LEVELS]  # Stats for each level
 
 hint_piece = None
 hint_move = None
@@ -60,31 +105,26 @@ hint_show_time = 0
 
 # Animation state
 animating = False
-anim_info = None  # dict with: piece_type ('white'/'black'), index, start, end, step, steps
+anim_info = None
 
 # UI state
 ui_pulse = 0
-button_feedback = {'play': 0, 'hint': 0}  # feedback timers
+button_feedback = {'play': 0, 'hint': 0}
+show_tutorial = False
+particles = []
 
 # Load and scale images with safe fallback
 def load_image(path, size):
-    """
-    Path must be relative path in your project, e.g.:
-      'build/web/assets/images/black knight.png'
-    This helper uses resource_path() so the file is found in dev and in the PyInstaller exe.
-    """
     try:
         full = resource_path(path)
         img = pygame.image.load(full).convert_alpha()
         return pygame.transform.smoothscale(img, size)
     except Exception:
-        # create placeholder if loading fails
         surf = pygame.Surface(size, pygame.SRCALPHA)
         surf.fill((180, 180, 180, 255))
         pygame.draw.rect(surf, (100, 100, 100), surf.get_rect(), 3)
         return surf
 
-# Use the same paths you used before; resource_path will resolve them under the exe
 black_knight = load_image('build/web/assets/images/black knight.png', (80, 80))
 white_rook = load_image('build/web/assets/images/white rook.png', (80, 80))
 white_knight = load_image('build/web/assets/images/white knight.png', (80, 80))
@@ -98,7 +138,6 @@ white_images = {
 black_images = {
     'knight': black_knight
 }
-piece_list = ['knight', 'bishop', 'rook']
 
 # Colors
 BACKGROUND_COLOR = (35, 40, 50)
@@ -113,10 +152,45 @@ BUTTON_DANGER = (180, 70, 70)
 BUTTON_DANGER_HOVER = (220, 100, 100)
 BUTTON_EXIT = (100, 100, 110)
 BUTTON_EXIT_HOVER = (130, 130, 140)
+BUTTON_DISABLED = (60, 60, 70)
 ACCENT_COLOR = (255, 200, 80)
+MENU_BG = (25, 30, 40)
 
 BOARD_ORIGIN = (0, 0)
 SQUARE_SIZE = 100
+
+# Particle class for visual effects
+class Particle:
+    def __init__(self, x, y, color, vx, vy):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.vx = vx
+        self.vy = vy
+        self.life = 60
+        self.size = 8
+    
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.vy += 0.3
+        self.life -= 1
+        self.size = max(1, self.size * 0.95)
+        return self.life > 0
+    
+    def draw(self):
+        alpha = int(255 * (self.life / 60))
+        s = pygame.Surface((int(self.size * 2), int(self.size * 2)), pygame.SRCALPHA)
+        pygame.draw.circle(s, (*self.color, alpha), (int(self.size), int(self.size)), int(self.size))
+        screen.blit(s, (int(self.x - self.size), int(self.y - self.size)))
+
+def spawn_particles(x, y, color, count=10):
+    for _ in range(count):
+        angle = math.radians(pygame.time.get_ticks() % 360 + _ * 36)
+        speed = 3 + _ * 0.5
+        vx = math.cos(angle) * speed
+        vy = math.sin(angle) * speed - 3
+        particles.append(Particle(x, y, color, vx, vy))
 
 def is_on_board(position):
     x, y = position
@@ -127,7 +201,6 @@ def is_on_board(position):
     return False
 
 def draw_board():
-    # board squares: rows 0..2; row2 only cols 4,5
     for row in range(3):
         for col in range(6):
             if row < 2 or (row == 2 and col >= 4):
@@ -140,7 +213,7 @@ def draw_board():
     pygame.draw.rect(screen, (180 - glow, 230, 230), [5 * SQUARE_SIZE, 2 * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE])
     pygame.draw.rect(screen, (150, 255, 255), [5 * SQUARE_SIZE, 2 * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE], 3)
 
-def draw_pieces(anim_offset=(0,0)):
+def draw_pieces():
     # white pieces
     for i, (piece, loc) in enumerate(zip(white_pieces, white_locations)):
         img = white_images.get(piece, white_knight)
@@ -148,23 +221,19 @@ def draw_pieces(anim_offset=(0,0)):
         if animating and anim_info and anim_info['piece_type']=='white' and anim_info['index']==i:
             continue
         
-        # hover effect
         if selection == i:
-            # scale up slightly
             scaled = pygame.transform.smoothscale(img, (90, 90))
             screen.blit(scaled, (draw_x - 5, draw_y - 5))
         else:
             screen.blit(img, (draw_x, draw_y))
         
-        # selection highlight
         if selection == i:
             s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
             t = pygame.time.get_ticks() / 300.0
             alpha = int(100 + 50 * math.sin(t))
             s.fill((255, 255, 0, alpha))
             screen.blit(s, (loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE))
-            pygame.draw.rect(s, (255, 255, 100, 255), s.get_rect(), 2)
-            screen.blit(s, (loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE))
+            pygame.draw.rect(screen, (255, 255, 100, 255), [loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE], 2)
 
     # black pieces
     for i, (piece, loc) in enumerate(zip(black_pieces, black_locations)):
@@ -185,11 +254,9 @@ def draw_pieces(anim_offset=(0,0)):
             alpha = int(100 + 50 * math.sin(t))
             s.fill((255, 255, 0, alpha))
             screen.blit(s, (loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE))
-            pygame.draw.rect(s, (255, 255, 100, 255), s.get_rect(), 2)
-            screen.blit(s, (loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE))
+            pygame.draw.rect(screen, (255, 255, 100, 255), [loc[0] * SQUARE_SIZE, loc[1] * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE], 2)
 
 def draw_valid(valid_moves):
-    # pulsing indicator with enhanced visuals
     t = pygame.time.get_ticks() / 250.0
     radius = 20 + int(8 * (0.5 + 0.5 * math.sin(t)))
     for move in valid_moves:
@@ -199,7 +266,7 @@ def draw_valid(valid_moves):
         screen.blit(s, (move[0] * SQUARE_SIZE, move[1] * SQUARE_SIZE))
 
 class Button:
-    def __init__(self, rect, text, base_color=BUTTON_NORMAL, hover_color=None, accent_color=None):
+    def __init__(self, rect, text, base_color=BUTTON_NORMAL, hover_color=None, font=None, disabled=False):
         self.rect = pygame.Rect(rect)
         self.text = text
         self.base_color = base_color
@@ -207,12 +274,16 @@ class Button:
         self.hovered = False
         self.pressed = False
         self.press_timer = 0
+        self.font = font if font else small_font
+        self.disabled = disabled
     
     def draw(self):
-        color = self.hover_color if self.hovered else self.base_color
+        if self.disabled:
+            color = BUTTON_DISABLED
+        else:
+            color = self.hover_color if self.hovered else self.base_color
         
-        # add press effect
-        if self.pressed:
+        if self.pressed and not self.disabled:
             self.press_timer -= 1
             press_amount = max(0, self.press_timer / 10.0)
             offset_y = int(press_amount * 3)
@@ -222,24 +293,31 @@ class Button:
         rect = self.rect.copy()
         rect.y += offset_y
         
-        # shadow
         shadow_rect = rect.copy()
         shadow_rect.y += 3
         pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=6)
         
-        # button
         pygame.draw.rect(screen, color, rect, border_radius=6)
-        pygame.draw.rect(screen, (255,255,255), rect, 2, border_radius=6)
         
-        # text
-        text_surf = small_font.render(self.text, True, (255,255,255))
+        if self.disabled:
+            pygame.draw.rect(screen, (100, 100, 100), rect, 2, border_radius=6)
+        else:
+            pygame.draw.rect(screen, (255,255,255), rect, 2, border_radius=6)
+        
+        text_color = (150, 150, 150) if self.disabled else (255, 255, 255)
+        text_surf = self.font.render(self.text, True, text_color)
         text_rect = text_surf.get_rect(center=rect.center)
         screen.blit(text_surf, text_rect)
     
     def update_hover(self, mouse_pos):
-        self.hovered = self.rect.collidepoint(mouse_pos)
+        if not self.disabled:
+            self.hovered = self.rect.collidepoint(mouse_pos)
+        else:
+            self.hovered = False
     
     def clicked(self, mouse_pos):
+        if self.disabled:
+            return False
         if self.rect.collidepoint(mouse_pos):
             self.pressed = True
             self.press_timer = 10
@@ -247,38 +325,71 @@ class Button:
         return False
 
 # Buttons
-play_again_btn = Button((500, 520, 120, 50), "Play Again", base_color=BUTTON_DANGER, hover_color=BUTTON_DANGER_HOVER)
-hint_btn = Button((350, 520, 120, 50), "Hint", base_color=BUTTON_ACCENT, hover_color=BUTTON_ACCENT_HOVER)
-exit_btn = Button((650, 520, 120, 50), "Exit", base_color=BUTTON_EXIT, hover_color=BUTTON_EXIT_HOVER)
+play_again_btn = Button((500, 560, 120, 50), "Restart", base_color=BUTTON_DANGER, hover_color=BUTTON_DANGER_HOVER)
+hint_btn = Button((350, 560, 120, 50), "Hint", base_color=BUTTON_ACCENT, hover_color=BUTTON_ACCENT_HOVER)
+exit_btn = Button((650, 560, 120, 50), "Menu", base_color=BUTTON_EXIT, hover_color=BUTTON_EXIT_HOVER)
+next_level_btn = Button((350, 450, 200, 60), "Next Level", base_color=BUTTON_ACCENT, hover_color=BUTTON_ACCENT_HOVER, font=medium_font)
+menu_btn = Button((350, 530, 200, 50), "Main Menu", base_color=BUTTON_EXIT, hover_color=BUTTON_EXIT_HOVER)
 
-def draw_ui():
-    global ui_pulse
+def draw_game_ui():
+    global ui_pulse, hint_btn
     ui_pulse += 1
     
-    # bottom panel with gradient effect
-    pygame.draw.rect(screen, (25, 30, 40), [0, 300, WIDTH, 300])
+    # bottom panel
+    pygame.draw.rect(screen, (25, 30, 40), [0, 300, WIDTH, 350])
     pygame.draw.line(screen, (100, 120, 160), (0, 300), (WIDTH, 300), 2)
     
+    # Game title
     screen.blit(big_font.render('Black Knight', True, ACCENT_COLOR), (20, 230))
-    screen.blit(small_font.render('Move the Black Knight to the light blue square! (No captures)', True, TEXT_COLOR), (20, 320))
-    screen.blit(small_font.render('Click a piece, then click a highlighted square to move it.', True, (200, 200, 200)), (20, 345))
-    screen.blit(small_font.render('This puzzle could be solved in 18 moves!', True, (200, 200, 200)), (20, 370))
     
+    # Level info
+    level = LEVELS[current_level]
+    level_text = small_font.render(f"Level: {level['name']}", True, TEXT_COLOR)
+    screen.blit(level_text, (20, 320))
+    
+    # Tutorial text - more helpful instructions
+    tutorial_surf = tiny_font.render(level['tutorial_text'], True, (150, 200, 255))
+    screen.blit(tutorial_surf, (20, 350))
+    
+    # Basic instructions
+    screen.blit(tiny_font.render('Move the Black Knight to the glowing square! (No captures allowed)', True, (200, 200, 200)), (20, 370))
+    screen.blit(tiny_font.render('Click a piece, then click a highlighted square to move it.', True, (180, 180, 180)), (20, 390))
+    
+    # Only show optimal moves for the last level (Hard)
+    if current_level == len(LEVELS) - 1:
+        optimal_text = tiny_font.render(f'Optimal solution: {level["optimal_moves"]} moves', True, (150, 200, 255))
+        screen.blit(optimal_text, (20, 410))
+    
+    # Move counter with star rating (only for last level)
     move_text = small_font.render(f'Moves: {move_count}', True, ACCENT_COLOR)
     screen.blit(move_text, (700, 20))
     
-    # Display previous game history
-    history_y = 55
-    if game_history:
-        screen.blit(tiny_font.render('Previous Attempts:', True, ACCENT_COLOR), (700, history_y))
-        history_y += 25
-        for i, entry in enumerate(game_history[-3:]):  # Show last 3 attempts
-            status_color = (100, 255, 100) if entry['completed'] else (200, 100, 100)
-            status_text = "Win" if entry['completed'] else "Did Not Finish"
-            history_text = tiny_font.render(f"Try {entry['attempt']}: {entry['moves']} mvs - {status_text}", True, status_color)
-            screen.blit(history_text, (700, history_y))
-            history_y += 22
-
+    # Star rating preview (only for last level)
+    if current_level == len(LEVELS) - 1:
+        stars = get_star_rating(move_count, level['optimal_moves'])
+        star_y = 50
+        for i in range(3):
+            color = (255, 215, 0) if i < stars else (80, 80, 80)
+            pygame.draw.polygon(screen, color, get_star_points(720 + i * 35, star_y, 12))
+    
+    # Level progress
+    progress_text = tiny_font.render(f'Level {current_level + 1}/{len(LEVELS)}', True, (200, 200, 200))
+    screen.blit(progress_text, (700, 90))
+    
+    # Best score for this level (only show for completed levels)
+    if level_stats[current_level].get('completed'):
+        best_text = tiny_font.render(f"Personal Best: {level_stats[current_level]['best_moves']} moves", True, (100, 255, 100))
+        screen.blit(best_text, (700, 110))
+    
+    # Credit text
+    credit_text = tiny_font.render('Interactive Media class project by', True, (150, 150, 150))
+    screen.blit(credit_text, (20, 590))
+    credit_name = tiny_font.render('By Youssif Goda for Prof. Russell McDermott', True, (180, 180, 180))
+    screen.blit(credit_name, (20, 610))
+    
+    # Update hint button disabled state - only enabled for last level
+    hint_btn.disabled = (current_level != len(LEVELS) - 1)
+    
     # buttons
     mouse_pos = pygame.mouse.get_pos()
     play_again_btn.update_hover(mouse_pos)
@@ -288,11 +399,154 @@ def draw_ui():
     hint_btn.draw()
     exit_btn.draw()
 
-def reset_game():
-    global white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move
-    white_locations = [(1, 0), (2, 0), (3, 0), (4, 0), (5, 0),
-                       (0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (4, 2)]
-    black_locations[:] = [(0, 0)]
+def draw_menu():
+    screen.fill(MENU_BG)
+    
+    # Title with glow effect
+    t = pygame.time.get_ticks() / 500.0
+    glow = int(20 + 10 * math.sin(t))
+    
+    title_surf = big_font.render('BLACK KNIGHT PUZZLE', True, ACCENT_COLOR)
+    title_rect = title_surf.get_rect(center=(WIDTH // 2, 100))
+    
+    # Draw glow
+    for offset in range(glow, 0, -2):
+        alpha = int(100 * (1 - offset / glow))
+        glow_surf = big_font.render('BLACK KNIGHT PUZZLE', True, (*ACCENT_COLOR[:3], alpha))
+        glow_rect = glow_surf.get_rect(center=(WIDTH // 2 + offset // 4, 100 + offset // 4))
+    
+    screen.blit(title_surf, title_rect)
+    
+    # Subtitle
+    subtitle = small_font.render('Choose Your Challenge', True, TEXT_COLOR)
+    screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 160)))
+    
+    # Level selection buttons
+    mouse_pos = pygame.mouse.get_pos()
+    y_start = 220
+    level_buttons = []
+    
+    for i, level in enumerate(LEVELS):
+        btn_y = y_start + i * 90
+        btn = Button((WIDTH // 2 - 150, btn_y, 300, 70), "", base_color=BUTTON_NORMAL, hover_color=BUTTON_HOVER)
+        btn.update_hover(mouse_pos)
+        
+        # Custom draw for level buttons
+        color = btn.hover_color if btn.hovered else btn.base_color
+        rect = btn.rect
+        
+        shadow_rect = rect.copy()
+        shadow_rect.y += 3
+        pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=8)
+        pygame.draw.rect(screen, color, rect, border_radius=8)
+        pygame.draw.rect(screen, (255,255,255), rect, 2, border_radius=8)
+        
+        # Level name
+        name_surf = medium_font.render(level['name'], True, ACCENT_COLOR)
+        screen.blit(name_surf, (rect.x + 20, rect.y + 10))
+        
+        # Description
+        desc_surf = tiny_font.render(level['description'], True, (200, 200, 200))
+        screen.blit(desc_surf, (rect.x + 20, rect.y + 40))
+        
+        # Stars for completed levels - only show for last level
+        if i == len(LEVELS) - 1 and level_stats[i].get('completed'):
+            stars = level_stats[i].get('stars', 0)
+            for j in range(3):
+                star_color = (255, 215, 0) if j < stars else (80, 80, 80)
+                pygame.draw.polygon(screen, star_color, get_star_points(rect.right - 100 + j * 30, rect.centery, 10))
+        elif level_stats[i].get('completed'):
+            # Just show a checkmark for completed non-final levels
+            checkmark = medium_font.render('✓', True, (100, 255, 100))
+            screen.blit(checkmark, (rect.right - 50, rect.centery - 15))
+        
+        level_buttons.append(btn)
+    
+    # Credit at bottom
+    credit_text = tiny_font.render('Interactive Media class project by Youssif Goda for Prof. Russel McDermott', True, (150, 150, 150))
+    screen.blit(credit_text, credit_text.get_rect(center=(WIDTH // 2, HEIGHT - 30)))
+    
+    return level_buttons
+
+def draw_level_complete():
+    # Semi-transparent overlay
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+    
+    # Completion box
+    box_rect = pygame.Rect(WIDTH // 2 - 200, HEIGHT // 2 - 150, 400, 300)
+    pygame.draw.rect(screen, (40, 45, 55), box_rect, border_radius=15)
+    pygame.draw.rect(screen, ACCENT_COLOR, box_rect, 3, border_radius=15)
+    
+    # Title
+    title_surf = medium_font.render('Level Complete!', True, ACCENT_COLOR)
+    screen.blit(title_surf, title_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 100)))
+    
+    # Stats
+    level = LEVELS[current_level]
+    moves_surf = small_font.render(f'Moves: {move_count}', True, TEXT_COLOR)
+    screen.blit(moves_surf, moves_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 50)))
+    
+    # Only show optimal comparison and stars for last level
+    if current_level == len(LEVELS) - 1:
+        optimal_surf = tiny_font.render(f'Optimal: {level["optimal_moves"]} moves', True, (200, 200, 200))
+        screen.blit(optimal_surf, optimal_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 20)))
+        
+        # Stars
+        stars = get_star_rating(move_count, level['optimal_moves'])
+        star_y = HEIGHT // 2 + 20
+        for i in range(3):
+            color = (255, 215, 0) if i < stars else (80, 80, 80)
+            pygame.draw.polygon(screen, color, get_star_points(WIDTH // 2 - 50 + i * 50, star_y, 18))
+    else:
+        # For non-final levels, just show an encouraging message
+        congrats_surf = tiny_font.render('Great job! Ready for the next challenge?', True, (150, 200, 255))
+        screen.blit(congrats_surf, congrats_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10)))
+    
+    # Buttons
+    mouse_pos = pygame.mouse.get_pos()
+    
+    if current_level < len(LEVELS) - 1:
+        next_level_btn.update_hover(mouse_pos)
+        next_level_btn.draw()
+    else:
+        # Game complete message
+        complete_surf = small_font.render('All Levels Complete!', True, (100, 255, 100))
+        screen.blit(complete_surf, complete_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 70)))
+    
+    menu_btn.update_hover(mouse_pos)
+    menu_btn.draw()
+
+def get_star_rating(moves, optimal):
+    """Calculate star rating based on moves vs optimal - more forgiving thresholds"""
+    if moves <= optimal:
+        return 3
+    elif moves <= optimal + 3:  # Within 3 moves of optimal
+        return 2
+    elif moves <= optimal + 6:  # Within 6 moves of optimal
+        return 1
+    return 0
+
+def get_star_points(cx, cy, size):
+    points = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        radius = size if i % 2 == 0 else size // 2
+        x = cx + radius * math.cos(angle)
+        y = cy - radius * math.sin(angle)
+        points.append((x, y))
+    return points
+
+def load_level(level_idx):
+    global white_pieces, white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move, current_level
+    
+    current_level = level_idx
+    level = LEVELS[level_idx]
+    
+    white_pieces = level['white_pieces'].copy()
+    white_locations = level['white_locations'].copy()
+    black_locations = [level['black_start']]
     move_count = 0
     winner = ""
     selection = None
@@ -300,7 +554,10 @@ def reset_game():
     hint_piece = None
     hint_move = None
 
-# Movement check functions (reuse from original but safer)
+def reset_game():
+    load_level(current_level)
+
+# Movement check functions
 def check_knight(position, white_locs, black_locs):
     moves = [(1, 2), (1, -2), (2, 1), (2, -1), (-1, 2), (-1, -2), (-2, 1), (-2, -1)]
     res = []
@@ -339,7 +596,7 @@ def check_options(piece, location, white_locs, black_locs):
         return check_rook(location, white_locs, black_locs)
     return []
 
-# --- BFS that only moves pieces INTO the single empty square ---
+# BFS hint system
 def find_empty_square(white_locs, black_locs):
     all_squares = []
     for y in range(3):
@@ -449,14 +706,14 @@ def start_animation(piece_type, index, start_pos, end_pos, steps=12):
     }
 
 def update_animation():
-    global animating, anim_info, white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move, game_history
+    global animating, anim_info, white_locations, black_locations, move_count, winner, selection, valid_moves, hint_piece, hint_move, game_state, level_stats
     if not animating or not anim_info:
         return
     anim_info['step'] += 1
     s = anim_info['start']
     e = anim_info['end']
     
-    # easing function for smoother animation
+    # easing function
     t = anim_info['step'] / anim_info['steps']
     t = t * t * (3 - 2 * t)  # smoothstep
     
@@ -468,14 +725,26 @@ def update_animation():
             white_locations[anim_info['index']] = anim_info['end']
         else:
             black_locations[anim_info['index']] = anim_info['end']
-            if black_locations[0] == (5,2):
+            target = LEVELS[current_level]['target']
+            if black_locations[0] == target:
                 move_count += 1
-                winner = f"Black Knight wins in {move_count} moves!"
-                game_history.append({
-                    'attempt': len(game_history) + 1,
-                    'moves': move_count,
-                    'completed': True
-                })
+                winner = f"Level Complete!"
+                game_state = 'level_complete'
+                
+                # Update level stats
+                stars = get_star_rating(move_count, LEVELS[current_level]['optimal_moves'])
+                if not level_stats[current_level].get('completed'):
+                    level_stats[current_level]['completed'] = True
+                    level_stats[current_level]['best_moves'] = move_count
+                    level_stats[current_level]['stars'] = stars
+                else:
+                    if move_count < level_stats[current_level]['best_moves']:
+                        level_stats[current_level]['best_moves'] = move_count
+                        level_stats[current_level]['stars'] = max(stars, level_stats[current_level]['stars'])
+                
+                # Spawn celebration particles
+                spawn_particles(5 * SQUARE_SIZE + 50, 2 * SQUARE_SIZE + 50, (255, 215, 0), 30)
+        
         animating = False
         anim_info = None
         if winner == "":
@@ -502,137 +771,154 @@ def draw_anim_piece():
     screen.blit(img, (draw_x, draw_y))
 
 def main():
-    global selection, valid_moves, move_count, winner, hint_piece, hint_move, animating, anim_info, game_history
+    global selection, valid_moves, move_count, winner, hint_piece, hint_move, animating, anim_info, game_state, particles
+
+    # Start at menu
+    game_state = 'menu'
+    level_buttons = []
 
     run = True
     while run:
         timer.tick(fps)
         screen.fill(BACKGROUND_COLOR)
-        draw_board()
-
-        # UI
-        draw_ui()
-
-        # draw pieces (except animating one)
-        draw_pieces()
-
-        # draw valid moves if selection
-        if selection is not None and not animating and winner == "":
-            if selection < len(white_pieces):
-                piece = white_pieces[selection]
-                loc = white_locations[selection]
-                valid_moves = check_options(piece, loc, white_locations, black_locations)
-            else:
-                piece = black_pieces[0]
-                loc = black_locations[0]
-                valid_moves = check_options(piece, loc, white_locations, black_locations)
-            draw_valid(valid_moves)
-
-        # draw hint arrow if present
-        if hint_piece is not None and hint_move is not None:
-            htype, hidx, hdest = hint_piece
-            if htype == 'white':
-                cur = white_locations[hidx]
-                color = (0, 255, 0)
-            else:
-                cur = black_locations[hidx]
-                color = (0, 0, 255)
-            center = (cur[0]*SQUARE_SIZE + SQUARE_SIZE//2, cur[1]*SQUARE_SIZE + SQUARE_SIZE//2)
-            new_center = (hdest[0]*SQUARE_SIZE + SQUARE_SIZE//2, hdest[1]*SQUARE_SIZE + SQUARE_SIZE//2)
+        
+        # Update particles
+        particles = [p for p in particles if p.update()]
+        
+        if game_state == 'menu':
+            level_buttons = draw_menu()
             
-            # animated arrow
-            t = (pygame.time.get_ticks() % 1000) / 1000.0
-            offset = math.sin(t * math.pi * 2) * 5
-            pygame.draw.line(screen, (255, 255, 150), center, new_center, 4)
-            pygame.draw.circle(screen, (255, 255, 150), new_center, 12 + int(offset))
-            pygame.draw.circle(screen, (200, 200, 100), new_center, 10)
-
-        # handle animation updates/draw on top
-        if animating:
-            update_animation()
-            draw_anim_piece()
-
-        # events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                run = False
-
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if animating:
-                    continue
-                mx, my = event.pos
-                # buttons
-                if play_again_btn.clicked(event.pos):
-                    if move_count > 0 and winner == "":
-                        game_history.append({
-                            'attempt': len(game_history) + 1,
-                            'moves': move_count,
-                            'completed': False
-                        })
-                    reset_game()
-                    continue
-                if hint_btn.clicked(event.pos):
-                    result = bfs_find_next_move(white_locations, black_locations, target=(5,2))
-                    if result:
-                        hint_piece = result
-                        hint_move = result[2]
-                    else:
-                        hint_piece = None
-                        hint_move = None
-                    continue
-                if exit_btn.clicked(event.pos):
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     run = False
-                    continue
-
-                # board click
-                x_coord = mx // SQUARE_SIZE
-                y_coord = my // SQUARE_SIZE
-                click_coords = (x_coord, y_coord)
-
-                # selection or move
-                if winner == "":
-                    if click_coords in white_locations:
-                        selection = white_locations.index(click_coords)
-                        hint_piece = None
-                        hint_move = None
-                    elif click_coords in black_locations:
-                        selection = black_locations.index(click_coords) + len(white_pieces)
-                        hint_piece = None
-                        hint_move = None
-                    elif selection is not None:
-                        if selection < len(white_pieces):
-                            piece = white_pieces[selection]
-                            loc = white_locations[selection]
-                            valid_moves = check_options(piece, loc, white_locations, black_locations)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for i, btn in enumerate(level_buttons):
+                        if btn.clicked(event.pos):
+                            load_level(i)
+                            game_state = 'playing'
+                            break
+        
+        elif game_state == 'playing':
+            draw_board()
+            draw_game_ui()
+            draw_pieces()
+            
+            # Draw valid moves if selection
+            if selection is not None and not animating and winner == "":
+                if selection < len(white_pieces):
+                    piece = white_pieces[selection]
+                    loc = white_locations[selection]
+                    valid_moves = check_options(piece, loc, white_locations, black_locations)
+                else:
+                    piece = black_pieces[0]
+                    loc = black_locations[0]
+                    valid_moves = check_options(piece, loc, white_locations, black_locations)
+                draw_valid(valid_moves)
+            
+            # Draw hint arrow
+            if hint_piece is not None and hint_move is not None:
+                htype, hidx, hdest = hint_piece
+                if htype == 'white':
+                    cur = white_locations[hidx]
+                    color = (0, 255, 0)
+                else:
+                    cur = black_locations[hidx]
+                    color = (0, 0, 255)
+                center = (cur[0]*SQUARE_SIZE + SQUARE_SIZE//2, cur[1]*SQUARE_SIZE + SQUARE_SIZE//2)
+                new_center = (hdest[0]*SQUARE_SIZE + SQUARE_SIZE//2, hdest[1]*SQUARE_SIZE + SQUARE_SIZE//2)
+                
+                t = (pygame.time.get_ticks() % 1000) / 1000.0
+                offset = math.sin(t * math.pi * 2) * 5
+                pygame.draw.line(screen, (255, 255, 150), center, new_center, 4)
+                pygame.draw.circle(screen, (255, 255, 150), new_center, 12 + int(offset))
+                pygame.draw.circle(screen, (200, 200, 100), new_center, 10)
+            
+            # Handle animation
+            if animating:
+                update_animation()
+                draw_anim_piece()
+            
+            # Events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if animating:
+                        continue
+                    mx, my = event.pos
+                    
+                    # Button handling
+                    if play_again_btn.clicked(event.pos):
+                        reset_game()
+                        continue
+                    if hint_btn.clicked(event.pos):
+                        result = bfs_find_next_move(white_locations, black_locations, target=LEVELS[current_level]['target'])
+                        if result:
+                            hint_piece = result
+                            hint_move = result[2]
                         else:
-                            piece = black_pieces[0]
-                            loc = black_locations[0]
-                            valid_moves = check_options(piece, loc, white_locations, black_locations)
-                        if click_coords in valid_moves:
+                            hint_piece = None
+                            hint_move = None
+                        continue
+                    if exit_btn.clicked(event.pos):
+                        game_state = 'menu'
+                        continue
+                    
+                    # Board click
+                    x_coord = mx // SQUARE_SIZE
+                    y_coord = my // SQUARE_SIZE
+                    click_coords = (x_coord, y_coord)
+                    
+                    if winner == "":
+                        if click_coords in white_locations:
+                            selection = white_locations.index(click_coords)
+                            hint_piece = None
+                            hint_move = None
+                        elif click_coords in black_locations:
+                            selection = black_locations.index(click_coords) + len(white_pieces)
+                            hint_piece = None
+                            hint_move = None
+                        elif selection is not None:
                             if selection < len(white_pieces):
-                                start_animation('white', selection, white_locations[selection], click_coords, steps=12)
+                                piece = white_pieces[selection]
+                                loc = white_locations[selection]
+                                valid_moves = check_options(piece, loc, white_locations, black_locations)
                             else:
-                                start_animation('black', selection - len(white_pieces), black_locations[selection - len(white_pieces)], click_coords, steps=12)
+                                piece = black_pieces[0]
+                                loc = black_locations[0]
+                                valid_moves = check_options(piece, loc, white_locations, black_locations)
+                            if click_coords in valid_moves:
+                                if selection < len(white_pieces):
+                                    start_animation('white', selection, white_locations[selection], click_coords, steps=12)
+                                else:
+                                    start_animation('black', selection - len(white_pieces), black_locations[selection - len(white_pieces)], click_coords, steps=12)
+                            else:
+                                selection = None
+                                valid_moves = []
                         else:
                             selection = None
                             valid_moves = []
-                    else:
-                        selection = None
-                        valid_moves = []
-
-        if winner:
-            # fancy win screen
-            win_text = big_font.render(winner, True, ACCENT_COLOR)
-            t = pygame.time.get_ticks() / 300.0
-            scale = 1 + 0.1 * math.sin(t)
-            win_text = pygame.transform.smoothscale(win_text, (int(win_text.get_width() * scale), int(win_text.get_height() * scale)))
-            win_rect = win_text.get_rect(center=(WIDTH // 2, 450))
-            screen.blit(win_text, win_rect)
-
-        # draw anim piece again if necessary
-        if animating:
-            draw_anim_piece()
-
+        
+        elif game_state == 'level_complete':
+            draw_board()
+            draw_pieces()
+            draw_level_complete()
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    run = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if current_level < len(LEVELS) - 1:
+                        if next_level_btn.clicked(event.pos):
+                            load_level(current_level + 1)
+                            game_state = 'playing'
+                    if menu_btn.clicked(event.pos):
+                        game_state = 'menu'
+        
+        # Draw particles on top
+        for p in particles:
+            p.draw()
+        
         pygame.display.flip()
 
     pygame.quit()

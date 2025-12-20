@@ -20,7 +20,6 @@ In this puzzle game, you control a lone black knight surrounded by white chess p
 
 ![alt text](image.png)
 ![alt text](image-1.png)
-
 ## How to Play
 
 1. Select a Piece: Click on any white or black piece to select it
